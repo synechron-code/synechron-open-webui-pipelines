@@ -90,7 +90,7 @@ class Pipeline:
                           'tool_choice', 'top_p', 'log_probs', 'top_logprobs', 'response_format', 'seed'}
 
         # Azure OpenAI reasoning models (o-models) do not support the following params
-        o_model_not_allowed_params = {"temperature", "top_p", "presence_penalty", "frequency_penalty", "logprobs", "top_logprobs", "logit_bias", "max_tokens"}
+        o_model_not_allowed_params = {"stream", "temperature", "top_p", "presence_penalty", "frequency_penalty", "logprobs", "top_logprobs", "logit_bias", "max_tokens"}
 
         # remap user field
         if "user" in body and not isinstance(body["user"], str):
