@@ -54,7 +54,7 @@ class Pipeline:
             **{
                 "AZURE_AI_CHAT_KEY": os.getenv("AZURE_AI_CHAT_KEY", None),
                 "AZURE_AI_CHAT_ENDPOINT": os.getenv("AZURE_AI_CHAT_ENDPOINT", "https://<your-deployment-name>.<your-azure-region>.models.ai.azure.com"),
-                "AZURE_AI_API_VERSION": os.getenv("AZURE_AI_API_VERSION", "2024-02-01"),
+                "AZURE_AI_API_VERSION": os.getenv("AZURE_AI_API_VERSION", "2025-01-01-preview"),
                 "AZURE_AI_MODELS": os.getenv("AZURE_AI_MODELS", "gpt-4o-mini"),
                 "AZURE_AI_MODEL_NAMES": os.getenv("AZURE_AI_MODEL_NAMES", "gpt-4o-mini"),
                 "AZURE_AI_API_DEBUG": os.getenv("AZURE_AI_API_DEBUG", "False").lower() in ("1","true","yes"),

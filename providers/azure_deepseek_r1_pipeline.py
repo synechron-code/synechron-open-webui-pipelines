@@ -19,7 +19,7 @@ class Pipeline:
             **{
                 "AZURE_DEEPSEEKR1_API_KEY": os.getenv("AZURE_DEEPSEEKR1_API_KEY", "your-azure-deepseek-r1-api-key-here"),
                 "AZURE_DEEPSEEKR1_ENDPOINT": os.getenv("AZURE_DEEPSEEKR1_ENDPOINT", "your-azure-deepseek-r1-endpoint-here"),
-                "AZURE_DEEPSEEKR1_API_VERSION": os.getenv("AZURE_DEEPSEEKR1_API_VERSION", "2024-05-01-preview"),
+                "AZURE_DEEPSEEKR1_API_VERSION": os.getenv("AZURE_DEEPSEEKR1_API_VERSION", "2025-01-01-preview"),
                 "AZURE_DEEPSEEKR1_MODEL": os.getenv("AZURE_DEEPSEEKR1_MODEL", "deepseek"),
                 
             }

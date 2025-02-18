@@ -21,9 +21,9 @@ class Pipeline:
             **{
                 "AZURE_OPENAI_API_KEY": os.getenv("AZURE_OPENAI_API_KEY", ""),
                 "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "your-azure-openai-endpoint-here"),
-                "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01"),
-                "AZURE_OPENAI_MODELS": os.getenv("AZURE_OPENAI_MODELS", "gpt-35-turbo;gpt-4o"),
-                "AZURE_OPENAI_MODEL_NAMES": os.getenv("AZURE_OPENAI_MODEL_NAMES", "GPT-35 Turbo;GPT-4o"),
+                "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"),
+                "AZURE_OPENAI_MODELS": os.getenv("AZURE_OPENAI_MODELS", "gpt-4o;gpt-4o-mini"),
+                "AZURE_OPENAI_MODEL_NAMES": os.getenv("AZURE_OPENAI_MODEL_NAMES", "GPT-4o;GPT-4o-MINI"),
             }
         )
         self.bearer_token_provider = self._get_token()
@@ -89,15 +89,21 @@ class Pipeline:
                           'frequency_penalty', 'logit_bias', 'user', 'function_call', 'funcions', 'tools',
                           'tool_choice', 'top_p', 'log_probs', 'top_logprobs', 'response_format', 'seed'}
 
-        # o1 and o1-mini don't alow stream = True!
-        if model_id in ("o1", "o1-mini"):
-            allowed_params.remove('stream')
-            body["max_completion_tokens"] = 4000
+        # Azure OpenAI reasoning models (o-models) do not support the following params
+        o_model_not_allowed_params = {"temperature", "top_p", "presence_penalty", "frequency_penalty", "logprobs", "top_logprobs", "logit_bias", "max_tokens"}
 
         # remap user field
         if "user" in body and not isinstance(body["user"], str):
             body["user"] = body["user"]["id"] if "id" in body["user"] else str(body["user"])
-        filtered_body = {k: v for k, v in body.items() if k in allowed_params}
+
+        # Remove not allowed params for o-models
+        if model_id.startswith("o"):
+            if "max_tokens" in body and "max_completion_tokens" not in body:
+                body["max_completion_tokens"] = body["max_tokens"]
+            filtered_body = {k: v for k, v in body.items() if k in allowed_params and k not in o_model_not_allowed_params}
+        else:
+            filtered_body = {k: v for k, v in body.items() if k in allowed_params}
+
         # log fields that were filtered out as a single line
         if len(body) != len(filtered_body):
             print(f"Dropped params: {', '.join(set(body.keys()) - set(filtered_body.keys()))}")
