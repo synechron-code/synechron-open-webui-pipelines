@@ -108,6 +108,11 @@ class Pipeline:
         if len(body) != len(filtered_body):
             print(f"Dropped params: {', '.join(set(body.keys()) - set(filtered_body.keys()))}")
 
+        # Log the request details
+        print(f"Request URL: {url}")
+        print(f"Request Headers: {headers}")
+        print(f"Request Body: {filtered_body}")
+        
         try:
             r = requests.post(
                 url=url,
