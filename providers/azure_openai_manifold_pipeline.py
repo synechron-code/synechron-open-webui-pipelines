@@ -120,11 +120,13 @@ class Pipeline:
                 headers=headers,
                 stream=True,
             )
+            
+            print (f"response: {r}")
 
             r.raise_for_status()
             if body["stream"]:
                 iter = r.iter_lines()
-                print(f"response: {iter}")
+                print(f"response (stream): {iter}")
                 return iter
             else:
                 print(f"response: {r.json()}")
