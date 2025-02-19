@@ -6,16 +6,16 @@ import os
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 def dump_response(response):
-    print("Status Code:", response.status_code)
-    print("Headers:", response.headers)
-    print("Content:", response.content)
-    print("Text:", response.text)
-    print("JSON:", response.json() if response.headers.get('Content-Type') == 'application/json' else "Not a JSON response")
-    print("URL:", response.url)
-    print("History:", response.history)
-    print("Elapsed Time:", response.elapsed)
-    print("Request Headers:", response.request.headers)
-    print("Request Body:", response.request.body)
+    print("Response Status Code:", response.status_code)
+    print("Response Headers:", response.headers)
+    print("Response Content:", response.content)
+    print("Response Text:", response.text)
+    print("Response JSON:", response.json() if response.headers.get('Content-Type') == 'application/json' else "Not a JSON response")
+    print("Response URL:", response.url)
+    print("Response History:", response.history)
+    print("Response Elapsed Time:", response.elapsed)
+    print("Response Request Headers:", response.request.headers)
+    print("Response Request Body:", response.request.body)
 
 class Pipeline:
     class Valves(BaseModel):
