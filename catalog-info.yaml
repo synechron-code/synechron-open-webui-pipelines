@@ -8,7 +8,7 @@ metadata:
   name: nexus-chat-v3-pipelines
   tags:
   - python
-  title: Nexus Chat v3 Pipelines (Open WebUI)
+  title: Nexus Chat v3 Pipelines
 spec:
   dependsOn:
   - component:default/nexuschat
