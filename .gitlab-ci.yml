@@ -1,13 +1,31 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
-stages:
-- test
-sast:
-  stage: test
 include:
-- template: Security/SAST.gitlab-ci.yml
+  - project: 'synechron-code/cloud-devops/templates/pipeline-templates'
+    ref: latest
+    file:
+      - /templates/jobs/.backstage-publish-docs.yaml
+      - /templates/jobs/.python-dependency-check.yaml
+      - /templates/jobs/.sast-check.yaml
+      - /templates/jobs/.code-quality-check.yaml
+      - /templates/jobs/.markdownlint.yaml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+variables:
+  SEM_VER: $CI_COMMIT_TAG
+  ACR_REGISTRY: "synecloudpracticeprodacr"
+  AZURE_CLIENT_ID: $AZURE_PROD_CLIENT_ID
+  AZURE_CLIENT_SECRET: $AZURE_PROD_CLIENT_SECRET
+  AZURE_TENANT_ID: $ARM_TENANT_ID
+
+stages:
+  - test
+  - document
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_TAG
+
+get_token:
+  tags:
+    - icp

@@ -1,0 +1,22 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    backstage.io/adr-location: docs/adr
+    backstage.io/techdocs-ref: dir:.
+  description: Nexus Chat v3 Pipelines (Open WebUI) UI-Agnostic OpenAI API Plugin Framework
+  name: nexuschat-pipelines
+  tags:
+  - python
+  title: Nexus Chat v3 Pipelines (Open WebUI)
+spec:
+  dependsOn:
+  - component:default/nexuschat-terraform
+  - component:default/nexuschat-gitops
+  - component:default/azure-shared-services
+  - component:default/nexus-shared-services
+  lifecycle: uat
+  owner: group:default/cloud-devops-internal-cloud-platforms-synechron-openai-chat
+  system: nexus-chat
+  type: service
+
