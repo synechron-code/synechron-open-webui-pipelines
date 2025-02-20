@@ -5,7 +5,7 @@ metadata:
     backstage.io/adr-location: docs/adr
     backstage.io/techdocs-ref: dir:.
   description: Nexus Chat v3 Pipelines (Open WebUI) is a library of Synechron proprietary pipeline plugins that can be deployed into the nexus chat platform
-  name: nexuschat-pipelines
+  name: nexus-chat-v3-pipelines
   tags:
   - python
   title: Nexus Chat v3 Pipelines (Open WebUI)
@@ -14,7 +14,7 @@ spec:
   - component:default/nexuschat
   - component:default/nexuschat-pipelines-backend
   lifecycle: uat
-  owner: group:default/ai
-  system: nexus-chat
+  owner: group:default/ai-nexus
+  system: nexus-chat-v3
   type: service
 
