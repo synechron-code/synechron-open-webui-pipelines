@@ -1,10 +1,10 @@
 site_name: nexuschat
 site_description: Nexus Chat is a modern, feature-rich and highly customizable AI chat platform based on the open source project Open WebUI.
-docs_dir: docs
+docs_dir: .
 nav:
-  - Home: ../README.md
-  - Apache: apache.md
+  - Home: README.md
   - Contribution: CONTRIBUTING.md
-  - Security: security.md
+  - Code of Conduct: CODE_OF_CONDUCT.md
+  - Security: SECURITY.md
 plugins:
   - techdocs-core
