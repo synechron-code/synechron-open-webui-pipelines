@@ -14,7 +14,7 @@ spec:
   - component:default/nexuschat
   - component:default/nexuschat-pipelines-backend
   lifecycle: uat
-  owner: group:default/ai-nexus
+  owner: group:default/ai-nexus-chat
   system: nexus-chat-v3
   type: service
 
