@@ -1,8 +1,8 @@
-site_name: nexuschat
-site_description: Nexus Chat is a modern, feature-rich and highly customizable AI chat platform based on the open source project Open WebUI.
-docs_dir: .
+site_name: nexuschat-pipelines
+site_description: Nexus Chat v3 (Open WebUI) Pipelines is library of Synechron proprietary pipeline plugins that can be deployed into the nexus chat platform.
+docs_dir: docs
 nav:
-  - Home: README.md
+  - Home: ../README.md
   - Contribution: CONTRIBUTING.md
   - Code of Conduct: CODE_OF_CONDUCT.md
   - Security: SECURITY.md
