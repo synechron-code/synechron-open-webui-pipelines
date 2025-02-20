@@ -1,3 +1,14 @@
+"""
+title: Azure OpenAI REST API
+author: davidsewell
+date: 2025-02-16
+version: 0.1
+license: MIT
+description: A pipeline for integrating with Azure OpenAI using the Azure OpenAI API and Managed Identities.
+requirements: azure-identity
+environment_variables: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, AZURE_OPENAI_MODELS, AZURE_OPENAI_MODEL_NAMES, AZURE_OPENAI_API_DEBUG
+"""
+
 from typing import List, Union, Generator, Iterator, Optional
 from pydantic import BaseModel
 import requests
@@ -124,7 +135,7 @@ class Pipeline:
         print(f"Request URL: {url}")
         print(f"Request Headers: {headers}")
         print(f"Request Body: {filtered_body}")
-        
+
         try:
             r = requests.post(
                 url=url,
@@ -132,7 +143,7 @@ class Pipeline:
                 headers=headers,
                 stream=True,
             )
-            
+
             dump_response(r)
 
             r.raise_for_status()
