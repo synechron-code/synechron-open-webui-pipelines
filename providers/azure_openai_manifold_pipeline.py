@@ -107,7 +107,7 @@ class Pipeline:
 
         url = f"{self.valves.AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_id}/chat/completions?api-version={self.valves.AZURE_OPENAI_API_VERSION}"
 
-        allowed_params = {'messages', 'temperature', 'role', 'content', 'contentPart', 'contentPartImage',
+        allowed_params = {'model', 'messages', 'temperature', 'role', 'content', 'contentPart', 'contentPartImage',
                           'enhancements', 'dataSources', 'n', 'stream', 'stop', 'max_tokens', 'presence_penalty',
                           'frequency_penalty', 'logit_bias', 'user', 'function_call', 'funcions', 'tools',
                           'tool_choice', 'top_p', 'log_probs', 'top_logprobs', 'response_format', 'seed'}
