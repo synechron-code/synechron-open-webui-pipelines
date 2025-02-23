@@ -21,7 +21,7 @@ class Pipeline:
         GITHUB_TOKEN: str
         GITHUB_OWNER: str
         GITHUB_REPO: str
-        GTHUB_BRANCH: str
+        GITHUB_BRANCH: str
         OLLAMA_HOST: str
         EMBED_MODEL: str
         MODEL: str
