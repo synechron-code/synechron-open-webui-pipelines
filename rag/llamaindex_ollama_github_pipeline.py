@@ -5,13 +5,11 @@ date: 2024-05-30
 version: 1.0
 license: MIT
 description: A pipeline for retrieving relevant information from a knowledge base using the Llama Index library with Ollama embeddings from a GitHub repository.
-requirements: llama-index-core>=0.12.19, llama-index, llama-index-llms-ollama, llama-index-embeddings-ollama, llama-index-readers-github
+requirements: llama-index-core, llama-index, llama-index-llms-ollama, llama-index-embeddings-ollama, llama-index-readers-github
 """
 
 from typing import List, Union, Generator, Iterator
-
 from pydantic import BaseModel
-from schemas import OpenAIChatMessage
 import os
 import asyncio
 
@@ -35,7 +33,7 @@ class Pipeline:
                 "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN", "your-github-personal-access-token"),
                 "GITHUB_OWNER": os.getenv("GITHUB_OWNER", "your-github-owner-name"),
                 "GITHUB_REPO": os.getenv("GITHUB_REPO", "your-github-repo-name"),
-                "GTHUB_BRANCH": os.getenv("GTHUB_BRANCH", "your-github-repo-branch-name"),
+                "GITHUB_BRANCH": os.getenv("GITHUB_BRANCH", "your-github-repo-branch-name"),
                 "OLLAMA_HOST": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
                 "EMBED_MODEL": os.getenv("OLLAMA_HOST", "nomic-embed-text"),
                 "MODEL": os.getenv("OLLAMA_HOST", "llama3"),
