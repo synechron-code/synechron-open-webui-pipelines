@@ -5,59 +5,144 @@ date: 2024-05-30
 version: 1.0
 license: MIT
 description: A pipeline for retrieving relevant information from a knowledge base using the Llama Index library with Ollama embeddings from a GitHub repository.
-requirements: llama-index-core, llama-index, llama-index-llms-ollama, llama-index-embeddings-ollama, llama-index-readers-github
+requirements: llama-index-embeddings-ollama, llama-index-embeddings-azure-openai, llama-index-readers-github
 """
 
-from typing import List, Union, Generator, Iterator
-from pydantic import BaseModel
-import os
+from typing import List, Union, Generator, Iterator, Optional
+from pydantic import BaseModel, Field
 import asyncio
 
+name = "GitHub RAG"
 
 class Pipeline:
     class Valves(BaseModel):
-        GITHUB_TOKEN: str
-        GITHUB_OWNER: str
-        GITHUB_REPO: str
-        GITHUB_BRANCH: str
-        OLLAMA_HOST: str
-        EMBED_MODEL: str
-        MODEL: str
+        GITHUB_TOKEN: str = Field(
+            default = None, description="GitHub PAT with read access to repo to be accessed"
+        )
+        GITHUB_OWNER: str = Field(
+            default = None, description="GitHub owner for the repo e.g. http://github.com/<owner>/..."
+        )
+        GITHUB_REPO: str = Field(
+            default = None, description="GitHub repo e.g. http://github.com/<owner>/<repo>"
+        )
+        GITHUB_BRANCH: str = Field(
+            default = "main", description="GitHub branch to be analyzed e.g. http://github.com/<owner>/<repo>/tree/<branch>"
+        )
+        OLLAMA_HOST: str = Field(
+            default = "http://ollama:11434", description="Ollama server host URL"
+        )
+        EMBED_MODEL: str = Field(
+            default = "text-embedding-3-large", description="Embedding model name (i.e. OpenAI name)"
+        )
+        MODEL: str = Field(
+            default = "gpt-4o-mini", description="Model name (i.e. OpenAI name)"
+        )
+        AZURE_OPENAI_API_KEY: Optional[str] = Field(
+            default = None, description="Azure OpenAI key, if key is None, DefaultAzureCredential will retrieve key for Managed Identity"
+        )
+        AZURE_OPENAI_ENDPOINT: Optional[str] = Field(
+            default = None, description="Azure OpenAI endpoint, blank Azure endpoint will enable Ollama endpoint and models"
+        )
+        AZURE_OPENAI_API_VERSION: Optional[str] = Field(
+            default = "2025-01-01-preview", description="Azure OpenAI versions"
+        )
+        AZURE_OPENAI_MODEL_NAME: Optional[str] = Field(
+            default = "gpt-4o-mini-payg", description="Deployment name (i.e. name given to model during deployment)"
+        )
+        AZURE_OPENAI_EMBED_MODEL_NAME: Optional[str] = Field(
+            default = "text-embedding-3-large", description="Embedding model deployment name (i.e. name given to model during deployment)"
+        )
 
     def __init__(self):
+        self.type = "manifold"
         self.documents = None
         self.index = None
-
-        self.valves = self.Valves(
-            **{
-                "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN", "your-github-personal-access-token"),
-                "GITHUB_OWNER": os.getenv("GITHUB_OWNER", "your-github-owner-name"),
-                "GITHUB_REPO": os.getenv("GITHUB_REPO", "your-github-repo-name"),
-                "GITHUB_BRANCH": os.getenv("GITHUB_BRANCH", "your-github-repo-branch-name"),
-                "OLLAMA_HOST": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
-                "EMBED_MODEL": os.getenv("OLLAMA_HOST", "nomic-embed-text"),
-                "MODEL": os.getenv("OLLAMA_HOST", "llama3"),
-            }
-        )
-
-    async def on_startup(self):
-        from llama_index.embeddings.ollama import OllamaEmbedding
-        from llama_index.llms.ollama import Ollama
-        from llama_index.core import VectorStoreIndex, Settings
-        from llama_index.readers.github import GithubRepositoryReader, GithubClient
-
-        Settings.embed_model = OllamaEmbedding(
-            model_name=self.valves.EMBED_MODEL,
-            base_url=self.valves.OLLAMA_HOST,
-        )
-        Settings.llm = Ollama(model=self.valves.MODEL)
+        self.embed_model = None
+        self.llm = None
 
         global index, documents
+
+        self.valves = self.Valves()
+
+        self.pipelines = self.pipes()
+
+    def pipes(self) -> list[dict[str, str]]:
+        owner = self.valves.GITHUB_OWNER
+        repo = self.valves.GITHUB_REPO
+        branch = self.valves.GITHUB_BRANCH
+        out = [
+            {"id": f"{name}:{owner}:{repo}:{branch}", "name": f"{name}:{owner}:{repo}:{branch}"}
+        ]
+        print(f"llamaindex_ollama_github_pipeline - {name}: {owner}/{repo}/{branch}")
+        return out
+
+    def _init_models(self):
+        """
+        Create models. Requires Azure Credentials. See the DefaultAzureCredential documentation for details
+        of the authentication process (it will cascade through multiple authentication methods until it finds one that
+        works, including a Workload Identity, an SPN via Env Vars, or az login credentials when running locally).
+        """
+
+        if self.valves.AZURE_OPENAI_ENDPOINT is not None:
+            from llama_index.llms.azure_openai import AzureOpenAI
+            from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
+
+            from azure.identity import DefaultAzureCredential
+
+            default_credential = DefaultAzureCredential(exclude_environment_credential=True)
+            token = default_credential.get_token(
+                "https://cognitiveservices.azure.com/.default"
+            )
+
+            try:
+                self.llm = AzureOpenAI(
+                    model=self.valves.MODEL,
+                    deployment_name=self.valves.AZURE_OPENAI_MODEL_NAME,
+                    api_key=self.valves.AZURE_OPENAI_API_KEY or token.token,
+                    azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
+                    api_version=self.valves.AZURE_OPENAI_API_VERSION,
+                )
+                self.embed_model = AzureOpenAIEmbedding(
+                    model=self.valves.EMBED_MODEL,
+                    deployment_name=self.valves.AZURE_OPENAI_EMBED_MODEL_NAME,
+                    api_key=self.valves.AZURE_OPENAI_API_KEY or token.token,
+                    azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
+                    api_version=self.valves.AZURE_OPENAI_API_VERSION,
+                )
+                print("Created AzureOpenAI models")
+            except Exception as e:
+                return f"Error: {e}"
+        else:
+            from llama_index.embeddings.ollama import OllamaEmbedding
+            from llama_index.llms.ollama import Ollama
+            try:
+                self.embed_model = OllamaEmbedding(
+                    model_name=self.valves.EMBED_MODEL,
+                    base_url=self.valves.OLLAMA_HOST,
+                    request_timeout=120.0
+                )
+                self.llm = Ollama(
+                    model=self.valves.MODEL,
+                    base_url=self.valves.OLLAMA_HOST,
+                    request_timeout=300.0
+                )
+                print("Created ollama models")
+            except Exception as e:
+                return f"Error: {e}"
+
+    async def _init_embeddings(self):
+        from llama_index.core import VectorStoreIndex, Settings
+        from llama_index.readers.github import GithubRepositoryReader, GithubClient
 
         github_token = self.valves.GITHUB_TOKEN
         owner = self.valves.GITHUB_OWNER
         repo = self.valves.GITHUB_REPO
         branch = self.valves.GITHUB_BRANCH
+
+        print(f"Start github embedding for {owner}/{repo}/{branch}")
+        self._init_models()
+        Settings.embed_model = self.embed_model
+        Settings.llm = self.llm
 
         github_client = GithubClient(github_token=github_token, verbose=True)
 
@@ -93,17 +178,30 @@ class Pipeline:
         finally:
             loop.close()
 
-        print(self.documents)
-        print(self.index)
         if self.index is None:
             raise ValueError("self.index is not initialized")
+
+        print(f"Finished github embedding for {len(self.documents)} documents for {owner}/{repo}/{branch}")
+
+    async def on_valves_updated(self):
+        print(f"on_valves_update: {__name__}")
+        print(self.valves)
+        self.pipelines = self.pipes()
+        await self._init_embeddings()
+
+    async def on_startup(self):
+        await self._init_embeddings()
 
     async def on_shutdown(self):
         # This function is called when the server is stopped.
         pass
 
     def pipe(
-        self, user_message: str, model_id: str, messages: List[dict], body: dict
+        self,
+        user_message: str,
+        model_id: str,
+        messages: List[dict],
+        body: dict,
     ) -> Union[str, Generator, Iterator]:
         # This is where you can add your custom RAG pipeline.
         # Typically, you would retrieve relevant information from your knowledge base and synthesize it to generate a response.
