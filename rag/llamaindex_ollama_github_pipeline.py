@@ -9,6 +9,8 @@ requirements: llama-index-core>=0.12.19, llama-index, llama-index-llms-ollama, l
 """
 
 from typing import List, Union, Generator, Iterator
+
+from pydantic import BaseModel
 from schemas import OpenAIChatMessage
 import os
 import asyncio
