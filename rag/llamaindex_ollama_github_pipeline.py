@@ -95,6 +95,8 @@ class Pipeline:
 
         print(self.documents)
         print(self.index)
+        if self.index is None:
+            raise ValueError("self.index is not initialized")
 
     async def on_shutdown(self):
         # This function is called when the server is stopped.
@@ -109,7 +111,12 @@ class Pipeline:
         print(messages)
         print(user_message)
 
-        query_engine = self.index.as_query_engine(streaming=True)
-        response = query_engine.query(user_message)
+        if self.index is None:
+            raise ValueError("self.index is not initialized")
+        try:
+            query_engine = self.index.as_query_engine(streaming=True)
+            response = query_engine.query(user_message)
+        except Exception as e:
+            raise Exception(f"Exception in llamaindex_ollama_github_pipeline: {e}")
 
         return response.response_gen
