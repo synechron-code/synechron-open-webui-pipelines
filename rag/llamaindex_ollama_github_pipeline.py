@@ -52,6 +52,13 @@ class Pipeline:
         AZURE_OPENAI_EMBED_MODEL_NAME: Optional[str] = Field(
             default = "text-embedding-3-large", description="Embedding model deployment name (i.e. name given to model during deployment)"
         )
+        INCLUDE_FILE_EXTENSIONS: Optional[str] = Field(
+            default= None, description="List of file extensions to include in the filter separated by ';'"
+        )
+        EXCLUDE_FILE_EXTENSIONS: Optional[str] = Field(
+            default=".png;.jpg;.jpeg;.gif;.svg;.ico;.json;.ipynb",
+            description="List of file extensions to exclude in the filter separated by ';'",
+        )
 
     def __init__(self):
         self.type = "manifold"
@@ -83,7 +90,7 @@ class Pipeline:
         works, including a Workload Identity, an SPN via Env Vars, or az login credentials when running locally).
         """
 
-        if self.valves.AZURE_OPENAI_ENDPOINT is not None:
+        if self.valves.AZURE_OPENAI_MODEL_NAME is not None:
             from llama_index.llms.azure_openai import AzureOpenAI
             from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
 
@@ -102,6 +109,32 @@ class Pipeline:
                     azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
                     api_version=self.valves.AZURE_OPENAI_API_VERSION,
                 )
+                print("Created AzureOpenAI llm")
+            except Exception as e:
+                return f"Error: {e}"
+        else:
+            from llama_index.llms.ollama import Ollama
+            try:
+                self.llm = Ollama(
+                    model=self.valves.MODEL,
+                    base_url=self.valves.OLLAMA_HOST,
+                    request_timeout=300.0
+                )
+                print("Created ollama llm")
+            except Exception as e:
+                return f"Error: {e}"
+
+        if self.valves.AZURE_OPENAI_EMBED_MODEL_NAME is not None:
+            from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
+
+            from azure.identity import DefaultAzureCredential
+
+            default_credential = DefaultAzureCredential(exclude_environment_credential=True)
+            token = default_credential.get_token(
+                "https://cognitiveservices.azure.com/.default"
+            )
+
+            try:
                 self.embed_model = AzureOpenAIEmbedding(
                     model=self.valves.EMBED_MODEL,
                     deployment_name=self.valves.AZURE_OPENAI_EMBED_MODEL_NAME,
@@ -109,24 +142,18 @@ class Pipeline:
                     azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
                     api_version=self.valves.AZURE_OPENAI_API_VERSION,
                 )
-                print("Created AzureOpenAI models")
+                print("Created AzureOpenAI embedding")
             except Exception as e:
                 return f"Error: {e}"
         else:
             from llama_index.embeddings.ollama import OllamaEmbedding
-            from llama_index.llms.ollama import Ollama
             try:
                 self.embed_model = OllamaEmbedding(
                     model_name=self.valves.EMBED_MODEL,
                     base_url=self.valves.OLLAMA_HOST,
                     request_timeout=120.0
                 )
-                self.llm = Ollama(
-                    model=self.valves.MODEL,
-                    base_url=self.valves.OLLAMA_HOST,
-                    request_timeout=300.0
-                )
-                print("Created ollama models")
+                print("Created ollama embedding")
             except Exception as e:
                 return f"Error: {e}"
 
@@ -146,6 +173,9 @@ class Pipeline:
 
         github_client = GithubClient(github_token=github_token, verbose=True)
 
+        include_file_extensions = self.valves.INCLUDE_FILE_EXTENSIONS.split(";") if self.valves.INCLUDE_FILE_EXTENSIONS else []
+        exclude_file_extensions = self.valves.EXCLUDE_FILE_EXTENSIONS.split(";") if self.valves.EXCLUDE_FILE_EXTENSIONS else []
+
         reader = GithubRepositoryReader(
             github_client=github_client,
             owner=owner,
@@ -153,16 +183,10 @@ class Pipeline:
             use_parser=False,
             verbose=False,
             filter_file_extensions=(
-                [
-                    ".png",
-                    ".jpg",
-                    ".jpeg",
-                    ".gif",
-                    ".svg",
-                    ".ico",
-                    "json",
-                    ".ipynb",
-                ],
+                include_file_extensions,
+                GithubRepositoryReader.FilterType.INCLUDE,
+            ) if include_file_extensions else (
+                exclude_file_extensions,
                 GithubRepositoryReader.FilterType.EXCLUDE,
             ),
         )
@@ -175,11 +199,14 @@ class Pipeline:
             # Load data from the branch
             self.documents = await asyncio.to_thread(reader.load_data, branch=branch)
             self.index = VectorStoreIndex.from_documents(self.documents)
+        except Exception as e:
+            print(f"Error: {e}")
         finally:
             loop.close()
 
         if self.index is None:
-            raise ValueError("self.index is not initialized")
+            print("Error: self.index is not initialized")
+            return
 
         print(f"Finished github embedding for {len(self.documents)} documents for {owner}/{repo}/{branch}")
 
@@ -191,6 +218,7 @@ class Pipeline:
 
     async def on_startup(self):
         await self._init_embeddings()
+        pass
 
     async def on_shutdown(self):
         # This function is called when the server is stopped.
@@ -212,7 +240,11 @@ class Pipeline:
         if self.index is None:
             raise ValueError("self.index is not initialized")
         try:
-            query_engine = self.index.as_query_engine(streaming=True)
+            query_engine = self.index.as_query_engine(
+                streaming=True,
+                similarity_top_k=0,
+                vector_store_query_mode="default"
+                )
             response = query_engine.query(user_message)
         except Exception as e:
             raise Exception(f"Exception in llamaindex_ollama_github_pipeline: {e}")
