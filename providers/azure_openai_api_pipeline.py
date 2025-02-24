@@ -12,7 +12,7 @@ environment_variables: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI
 from http.client import HTTPConnection
 import logging
 from typing import List, Union, Generator, Iterator, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 
 from openai import AzureOpenAI, ChatCompletion
@@ -40,32 +40,41 @@ logger = setup_logger()
 class Pipeline:
     class Valves(BaseModel):
         # You can add your custom valves here.
-        AZURE_OPENAI_API_KEY: Optional[str] = None
-        AZURE_OPENAI_ENDPOINT: str
-        AZURE_OPENAI_API_VERSION: str
-        AZURE_OPENAI_MODELS: str
-        AZURE_OPENAI_MODEL_NAMES: str
-        AZURE_OPENAI_API_DEBUG: Optional[bool] = False
+        DISABLED: bool = Field(
+            default = False, description="Disable pipeline"
+        )
+        AZURE_OPENAI_API_KEY: Optional[str] = Field(
+            default = None, description="Azure OpenAI key, if key is None, DefaultAzureCredential will retrieve key for Managed Identity"
+        )
+        AZURE_OPENAI_ENDPOINT: Optional[str] = Field(
+            default = "your-azure-openai-endpoint-here", description="Azure OpenAI endpoint, blank Azure endpoint will enable Ollama endpoint and models"
+        )
+        AZURE_OPENAI_API_VERSION: Optional[str] = Field(
+            default = "2025-01-01-preview", description="Azure OpenAI versions"
+        )
+        AZURE_OPENAI_MODELS: Optional[str] = Field(
+            default = "gpt-4o-mini-payg", description="List of models separated by ';'"
+        )
+        AZURE_OPENAI_MODEL_NAMES: Optional[str] = Field(
+            default = "text-embedding-3-large", description="List of deployment names separated by ';'"
+        )
+        ENABLE_DEBUG: bool = Field(
+            default = False, description="Enable debug logging"
+        )
 
     def __init__(self):
         self.type = "manifold"
         self.name = name
-        self.valves = self.Valves(
-            **{
-                "AZURE_OPENAI_API_KEY": os.getenv("AZURE_OPENAI_API_KEY", None),
-                "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", "your-azure-openai-endpoint-here"),
-                "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2025-01-01-preview"),
-                "AZURE_OPENAI_MODELS": os.getenv("AZURE_OPENAI_MODELS", "gpt-4o-mini"),
-                "AZURE_OPENAI_MODEL_NAMES": os.getenv("AZURE_OPENAI_MODEL_NAMES", "gpt-4o-mini"),
-                "AZURE_OPENAI_API_DEBUG": os.getenv("AZURE_OPENAI_API_DEBUG", "False").lower() in ("1","true","yes"),
-            }
-        )
+        self.valves = self.Valves()
+        self.set_pipelines()
 
-        self._enable_debug(self.valves.AZURE_OPENAI_API_DEBUG)
+        self._enable_debug(self.valves.ENABLE_DEBUG)
+
+        if self.valves.DISABLED:
+            return
 
         self.client = self._openai_client()
 
-        self.set_pipelines()
         pass
 
     def _enable_debug(self, enable: bool = False):
@@ -123,14 +132,18 @@ class Pipeline:
     async def on_valves_updated(self):
         logger.debug(f"on_valves_updated: {name}")
         logger.debug(self.valves)
-        self._enable_debug(self.valves.AZURE_OPENAI_API_DEBUG)
-        self.client = self._openai_client()
         self.set_pipelines()
+        if self.valves.DISABLED:
+            return
+        self._enable_debug(self.valves.ENABLE_DEBUG)
+        self.client = self._openai_client()
 
     async def on_startup(self):
         # This function is called when the server is started.
         logger.debug(f"on_startup:{name}")
         logger.debug(self.valves)
+        if self.valves.DISABLED:
+            return
         self.client = self._openai_client()
         pass
 
@@ -144,6 +157,9 @@ class Pipeline:
     ) -> Union[str, Generator, Iterator]:
         # This is where you can add your custom pipelines like RAG.
 
+        if self.valves.DISABLED:
+            return "WARNING: Pipeline DISABLED"
+
         # remap user field
         if "user" in body and not isinstance(body["user"], str):
             body["user"] = body["user"]["id"] if "id" in body["user"] else str(body["user"])
@@ -152,7 +168,7 @@ class Pipeline:
 
         # o1 and o1-mini don't alow stream = True!
         o_model = False
-        if model_id in ("o1", "o1-mini"):
+        if model_id.startswith("o"):
             o_model = True
             stream = False
 
@@ -168,7 +184,7 @@ class Pipeline:
         }
 
         if o_model:
-            max_tokens = body.get("max_tokens", 4000) or body.get("max_completion_tokens", 4000)
+            max_tokens = body.get("max_tokens") or body.get("max_completion_tokens", 4000) # fix this
             parameters["max_completion_tokens"] = max_tokens
         else:
             parameters["max_tokens"] = body.get("max_tokens", 4000)
@@ -177,7 +193,9 @@ class Pipeline:
 
         response: ChatCompletion = None
         try:
+            logger.debug(f"{parameters=}")
             response = self.client.chat.completions.create(**parameters)
+            logger.debug(f"{response=}")
 
             if stream:
                 return self.stream_response(response)
