@@ -8,14 +8,43 @@ description: A pipeline for retrieving relevant information from a knowledge bas
 requirements: llama-index-embeddings-ollama, llama-index-embeddings-azure-openai, llama-index-readers-github
 """
 
+import logging
 from typing import List, Union, Generator, Iterator, Optional
 from pydantic import BaseModel, Field
 import asyncio
 
+from llama_index.core import VectorStoreIndex, Settings
+from llama_index.readers.github import GithubRepositoryReader, GithubClient
+from llama_index.llms.azure_openai import AzureOpenAI
+from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
+
+from azure.identity import DefaultAzureCredential
+
+
 name = "GitHub RAG"
+
+def setup_logger():
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.set_name(name)
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.propagate = False
+    return logger
+
+logger = setup_logger()
+
 
 class Pipeline:
     class Valves(BaseModel):
+        DISABLED: bool = Field(
+            default = True, description="Disable pipeline"
+        )
         GITHUB_TOKEN: str = Field(
             default = "", description="GitHub PAT with read access to repo to be accessed"
         )
@@ -59,6 +88,13 @@ class Pipeline:
             default=".png;.jpg;.jpeg;.gif;.svg;.ico;.json;.ipynb",
             description="List of file extensions to exclude in the filter separated by ';'",
         )
+        INCLUDE_DIRECTORIES: Optional[str] = Field(
+            default= None, description="List of directories to include in the filter separated by ';'"
+        )
+        EXCLUDE_DIRECTORIES: Optional[str] = Field(
+            default= None, description="List of directories to exclude in the filter separated by ';'"
+        )
+
 
     def __init__(self):
         self.type = "manifold"
@@ -70,9 +106,13 @@ class Pipeline:
         global index, documents
 
         try:
-            self.valves = self.Valves()
+            self.valves = self.Valves(
+                **{
+                    "DISABLED": True,
+                }
+            )
         except Exception as e:
-            print(f"Error initializing Valves: {e}")
+            logger.exception(f"Error initializing Valves: {e}")
 
         self.pipelines = self.pipes()
         pass
@@ -84,7 +124,7 @@ class Pipeline:
         out = [
             {"id": f"{name}:{owner}:{repo}:{branch}", "name": f"{name}:{owner}:{repo}:{branch}"}
         ]
-        print(f"llamaindex_ollama_github_pipeline - {name}: {owner}/{repo}/{branch}")
+        logger.info(f"llamaindex_ollama_github_pipeline - {name}: {owner}/{repo}/{branch}")
         return out
 
     def _init_models(self):
@@ -95,11 +135,6 @@ class Pipeline:
         """
 
         if self.valves.AZURE_OPENAI_MODEL_NAME is not None:
-            from llama_index.llms.azure_openai import AzureOpenAI
-            from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
-
-            from azure.identity import DefaultAzureCredential
-
             default_credential = DefaultAzureCredential(exclude_environment_credential=True)
             token = default_credential.get_token(
                 "https://cognitiveservices.azure.com/.default"
@@ -113,7 +148,7 @@ class Pipeline:
                     azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
                     api_version=self.valves.AZURE_OPENAI_API_VERSION,
                 )
-                print("Created AzureOpenAI llm")
+                logger.info(f"Created AzureOpenAI llm: {self.valves.AZURE_OPENAI_MODEL_NAME}")
             except Exception as e:
                 return f"Error: {e}"
         else:
@@ -124,15 +159,11 @@ class Pipeline:
                     base_url=self.valves.OLLAMA_HOST,
                     request_timeout=300.0
                 )
-                print("Created ollama llm")
+                logger.info(f"Created ollama llm: {self.valves.MODEL}")
             except Exception as e:
                 return f"Error: {e}"
 
         if self.valves.AZURE_OPENAI_EMBED_MODEL_NAME is not None:
-            from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
-
-            from azure.identity import DefaultAzureCredential
-
             default_credential = DefaultAzureCredential(exclude_environment_credential=True)
             token = default_credential.get_token(
                 "https://cognitiveservices.azure.com/.default"
@@ -146,7 +177,7 @@ class Pipeline:
                     azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
                     api_version=self.valves.AZURE_OPENAI_API_VERSION,
                 )
-                print("Created AzureOpenAI embedding")
+                logger.info(f"Created AzureOpenAI embedding: {self.valves.AZURE_OPENAI_EMBED_MODEL_NAME}")
             except Exception as e:
                 return f"Error: {e}"
         else:
@@ -157,25 +188,26 @@ class Pipeline:
                     base_url=self.valves.OLLAMA_HOST,
                     request_timeout=120.0
                 )
-                print("Created ollama embedding")
+                logger.info(f"Created ollama embedding: {self.valves.EMBED_MODEL}")
             except Exception as e:
                 return f"Error: {e}"
 
     async def _init_embeddings(self):
-        from llama_index.core import VectorStoreIndex, Settings
-        from llama_index.readers.github import GithubRepositoryReader, GithubClient
-
         github_token = self.valves.GITHUB_TOKEN
         owner = self.valves.GITHUB_OWNER
         repo = self.valves.GITHUB_REPO
         branch = self.valves.GITHUB_BRANCH
 
-        # if any are None then exit
-        if not github_token or not owner or not repo:
-            print(f"Warning: github parameters must be configured")
+        if self.valves.DISABLED:
+            logger.warning(f"Pipeline disabled")
             return
 
-        print(f"Start github embedding for {owner}/{repo}/{branch}")
+        # if any are None then exit
+        if not github_token or not owner or not repo:
+            logger.warning(f"Github parameters must be configured")
+            return
+
+        logger.info(f"Start github embedding for {owner}/{repo}/{branch}")
         self._init_models()
         Settings.embed_model = self.embed_model
         Settings.llm = self.llm
@@ -184,6 +216,8 @@ class Pipeline:
 
         include_file_extensions = self.valves.INCLUDE_FILE_EXTENSIONS.split(";") if self.valves.INCLUDE_FILE_EXTENSIONS else []
         exclude_file_extensions = self.valves.EXCLUDE_FILE_EXTENSIONS.split(";") if self.valves.EXCLUDE_FILE_EXTENSIONS else []
+        include_directories = self.valves.INCLUDE_DIRECTORIES.split(";") if self.valves.INCLUDE_DIRECTORIES else []
+        exclude_directories = self.valves.EXCLUDE_DIRECTORIES.split(";") if self.valves.EXCLUDE_DIRECTORIES else []
 
         reader = GithubRepositoryReader(
             github_client=github_client,
@@ -198,6 +232,13 @@ class Pipeline:
                 exclude_file_extensions,
                 GithubRepositoryReader.FilterType.EXCLUDE,
             ),
+            filter_directories=(
+                include_directories,
+                GithubRepositoryReader.FilterType.INCLUDE,
+            ) if include_file_extensions else (
+                exclude_directories,
+                GithubRepositoryReader.FilterType.EXCLUDE,
+            ),
         )
 
         loop = asyncio.new_event_loop()
@@ -207,29 +248,30 @@ class Pipeline:
         try:
             # Load data from the branch
             self.documents = await asyncio.to_thread(reader.load_data, branch=branch)
-            self.index = VectorStoreIndex.from_documents(self.documents)
+            self.index = VectorStoreIndex.from_documents(self.documents, show_progress=True)
         except Exception as e:
-            print(f"Error: {e}")
+            logger.exception(f"Error: {e}")
         finally:
             loop.close()
 
         if self.index is None:
-            print("Error: self.index is not initialized")
+            logger.error("Vector store index is not initialized")
             return
 
-        print(f"Finished github embedding for {len(self.documents)} documents for {owner}/{repo}/{branch}")
+        logger.info(f"Finished github embedding for {len(self.documents)} documents for {owner}/{repo}/{branch}")
 
     async def on_valves_updated(self):
-        print(f"on_valves_update: {__name__}")
-        print(self.valves)
+        logger.debug(f"on_valves_update: {name}")
         self.pipelines = self.pipes()
         await self._init_embeddings()
 
     async def on_startup(self):
+        logger.info(f"on_startup: {name}")
         await self._init_embeddings()
         pass
 
     async def on_shutdown(self):
+        logger.info(f"on_shutdown: {name}")
         # This function is called when the server is stopped.
         pass
 
@@ -243,11 +285,12 @@ class Pipeline:
         # This is where you can add your custom RAG pipeline.
         # Typically, you would retrieve relevant information from your knowledge base and synthesize it to generate a response.
 
-        print(messages)
-        print(user_message)
+        logger.debug(f"message: {messages}")
+        logger.debug(f"user_message: {user_message}")
 
         if self.index is None:
-            raise ValueError("self.index is not initialized")
+            logger.error("Vector store index is not initialized")
+            return None
         try:
             query_engine = self.index.as_query_engine(
                 streaming=True,
