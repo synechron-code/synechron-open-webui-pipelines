@@ -19,6 +19,23 @@ from openai import AzureOpenAI, ChatCompletion
 from azure.identity import DefaultAzureCredential
 from azure.core.credentials import AzureKeyCredential
 
+name = "Azure OpenAI API"
+
+def setup_logger():
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.set_name(name)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.propagate = False
+    return logger
+
+logger = setup_logger()
 
 class Pipeline:
     class Valves(BaseModel):
@@ -32,7 +49,7 @@ class Pipeline:
 
     def __init__(self):
         self.type = "manifold"
-        self.name = "Azure OpenAI API: "
+        self.name = name
         self.valves = self.Valves(
             **{
                 "AZURE_OPENAI_API_KEY": os.getenv("AZURE_OPENAI_API_KEY", None),
@@ -53,14 +70,16 @@ class Pipeline:
 
     def _enable_debug(self, enable: bool = False):
         if enable:
-            print("AzureOpenAI enable debug logging")
+            logger.setLevel(logging.DEBUG)
+            logger.debug("enable debug logging")
             # Enable HTTPConnection debug logging to the console.
             HTTPConnection.debuglevel = 1
             logging.basicConfig(level=logging.DEBUG)
             logging.getLogger("openai").setLevel(logging.DEBUG)
             logging.getLogger("urllib3").setLevel(logging.DEBUG)
         else:
-            print("AzureOpenAI disable debug logging")
+            logger.debug("disable debug logging")
+            logger.setLevel(logging.INFO)
             # Enable HTTPConnection debug logging to the console.
             HTTPConnection.debuglevel = 0
             logging.basicConfig(level=logging.INFO)
@@ -86,7 +105,7 @@ class Pipeline:
                 azure_endpoint=self.valves.AZURE_OPENAI_ENDPOINT,
                 api_key=self.valves.AZURE_OPENAI_API_KEY or token.token
             )
-            print("AzureOpenAI client created")
+            logger.debug("client created")
         except Exception as e:
             return f"Error: {e}"
 
@@ -98,43 +117,32 @@ class Pipeline:
         self.pipelines = [
             {"id": model, "name": name} for model, name in zip(models, model_names)
         ]
-        print(f"azure_openai_api_pipeline - models: {self.pipelines}")
+        logger.info(f"azure_openai_api_pipeline - models: {self.pipelines}")
         pass
 
     async def on_valves_updated(self):
-        print(f"on_valves_update: {__name__}")
-        print(self.valves)
+        logger.debug(f"on_valves_updated: {name}")
+        logger.debug(self.valves)
         self._enable_debug(self.valves.AZURE_OPENAI_API_DEBUG)
         self.client = self._openai_client()
         self.set_pipelines()
 
     async def on_startup(self):
         # This function is called when the server is started.
-        print(f"on_startup:{__name__}")
-        print(self.valves)
+        logger.debug(f"on_startup:{name}")
+        logger.debug(self.valves)
         self.client = self._openai_client()
         pass
 
     async def on_shutdown(self):
         # This function is called when the server is stopped.
-        print(f"on_shutdown:{__name__}")
+        logger.debug(f"on_shutdown:{name}")
         pass
 
     def pipe(
             self, user_message: str, model_id: str, messages: List[dict], body: dict
     ) -> Union[str, Generator, Iterator]:
         # This is where you can add your custom pipelines like RAG.
-        print(f"pipe: {__name__}")
-
-        print(f"model_id: {model_id}")
-        print(f"messages: {messages}")
-        print(f"user_message: {user_message}")
-        print(f"body: {body}")
-
-        # allowed_params = {'messages', 'temperature', 'role', 'content', 'contentPart', 'contentPartImage',
-        #                   'enhancements', 'dataSources', 'n', 'stream', 'stop', 'max_tokens', 'presence_penalty',
-        #                   'frequency_penalty', 'logit_bias', 'user', 'function_call', 'funcions', 'tools',
-        #                   'tool_choice', 'top_p', 'log_probs', 'top_logprobs', 'response_format', 'seed'}
 
         # remap user field
         if "user" in body and not isinstance(body["user"], str):
@@ -143,23 +151,29 @@ class Pipeline:
         stream = body.get("stream", False)
 
         # o1 and o1-mini don't alow stream = True!
+        o_model = False
         if model_id in ("o1", "o1-mini"):
+            o_model = True
             stream = False
 
         # Base parameters for the API call
         parameters = {
             "model": model_id,
             "messages": messages,
-            "stream": stream,
             "temperature": body.get("temperature", 1),
-            "max_completion_tokens": body.get("max_tokens", 4000),
             "top_p": body.get("top_p", 1),
             "frequency_penalty": body.get("frequency_penalty", 0),
             "presence_penalty": body.get("presence_penalty", 0),
             "user": body.get("user", None)
         }
 
-        print(f"parameters: {parameters}")
+        if o_model:
+            max_tokens = body.get("max_tokens", 4000) or body.get("max_completion_tokens", 4000)
+            parameters["max_completion_tokens"] = max_tokens
+        else:
+            parameters["max_tokens"] = body.get("max_tokens", 4000)
+            parameters["stream"] = stream
+
 
         response: ChatCompletion = None
         try:
