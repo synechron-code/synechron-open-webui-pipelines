@@ -166,6 +166,11 @@ class Pipeline:
         repo = self.valves.GITHUB_REPO
         branch = self.valves.GITHUB_BRANCH
 
+        # if any are None then exit
+        if github_token is None or owner is None or repo is None:
+            print(f"Warning: github parameters must be configured")
+            return
+
         print(f"Start github embedding for {owner}/{repo}/{branch}")
         self._init_models()
         Settings.embed_model = self.embed_model
