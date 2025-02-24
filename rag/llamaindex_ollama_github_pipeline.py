@@ -17,13 +17,13 @@ name = "GitHub RAG"
 class Pipeline:
     class Valves(BaseModel):
         GITHUB_TOKEN: str = Field(
-            default = None, description="GitHub PAT with read access to repo to be accessed"
+            default = "", description="GitHub PAT with read access to repo to be accessed"
         )
         GITHUB_OWNER: str = Field(
-            default = None, description="GitHub owner for the repo e.g. http://github.com/<owner>/..."
+            default = "", description="GitHub owner for the repo e.g. http://github.com/<owner>/..."
         )
         GITHUB_REPO: str = Field(
-            default = None, description="GitHub repo e.g. http://github.com/<owner>/<repo>"
+            default = "", description="GitHub repo e.g. http://github.com/<owner>/<repo>"
         )
         GITHUB_BRANCH: str = Field(
             default = "main", description="GitHub branch to be analyzed e.g. http://github.com/<owner>/<repo>/tree/<branch>"
@@ -69,9 +69,13 @@ class Pipeline:
 
         global index, documents
 
-        self.valves = self.Valves()
+        try:
+            self.valves = self.Valves()
+        except Exception as e:
+            print(f"Error initializing Valves: {e}"}
 
         self.pipelines = self.pipes()
+        pass
 
     def pipes(self) -> list[dict[str, str]]:
         owner = self.valves.GITHUB_OWNER
@@ -167,7 +171,7 @@ class Pipeline:
         branch = self.valves.GITHUB_BRANCH
 
         # if any are None then exit
-        if github_token is None or owner is None or repo is None:
+        if not github_token or not owner or not repo:
             print(f"Warning: github parameters must be configured")
             return
 
