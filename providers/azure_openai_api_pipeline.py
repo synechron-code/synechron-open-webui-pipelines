@@ -28,7 +28,7 @@ def setup_logger():
         handler = logging.StreamHandler()
         handler.set_name(name)
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
