@@ -72,7 +72,7 @@ class Pipeline:
         try:
             self.valves = self.Valves()
         except Exception as e:
-            print(f"Error initializing Valves: {e}"}
+            print(f"Error initializing Valves: {e}")
 
         self.pipelines = self.pipes()
         pass
