@@ -106,11 +106,7 @@ class Pipeline:
         global index, documents
 
         try:
-            self.valves = self.Valves(
-                **{
-                    "DISABLED": True,
-                }
-            )
+            self.valves = self.Valves()
         except Exception as e:
             logger.exception(f"Error initializing Valves: {e}")
 
@@ -267,7 +263,7 @@ class Pipeline:
 
     async def on_startup(self):
         logger.info(f"on_startup: {name}")
-        await self._init_embeddings()
+        self.valves.DISABLED = True
         pass
 
     async def on_shutdown(self):
