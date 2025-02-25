@@ -142,6 +142,7 @@ class Pipeline:
         # This function is called when the server is started.
         logger.debug(f"on_startup:{name}")
         logger.debug(self.valves)
+        self.set_pipelines()
         if self.valves.DISABLED:
             return
         self.client = self._openai_client()
