@@ -10,6 +10,8 @@ required_open_webui_version: 0.5.0
 import base64
 from dataclasses import dataclass
 from io import BytesIO
+import logging
+import json
 import textwrap
 from PIL import Image
 from fastapi import HTTPException, Request
@@ -20,6 +22,9 @@ from pydantic import BaseModel, Field
 import requests
 import traceback
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class Utils:
     @dataclass
@@ -232,27 +237,30 @@ class Utils:
             else:
                 errmsg = f"PlantUML server error: {response.status_code}  \n{response.content.decode('utf-8')}"
                 error_trace = traceback.format_exc()
-                print(f"{errmsg}\nTraceback: {error_trace}")
-                error = Utils.EncodedImage(errmsg, None, "error")
-                return error
+                logger.debug(f"{errmsg}\nTraceback: {error_trace}")
+                return Utils.EncodedImage(errmsg, None, "error")
         except Exception as e:
             errmsg = f"PlantUML server error: {e}"
             error_trace = traceback.format_exc()
-            print(f"{errmsg}\nTraceback: {error_trace}")
-            error = Utils.EncodedImage(errmsg, None, "error")
-            return error
+            logger.debug(f"{errmsg}\nTraceback: {error_trace}")
+            return Utils.EncodedImage(errmsg, None, "error")
 
 class Tools:
     class Valves(BaseModel):
         """Configuration valves for the PlantUML tool"""
-
         plantuml_server: str = Field(
             default="http://www.plantuml.com/plantuml/img/",
             description="PlantUML server URL for image generation",
         )
+        enable_debug: bool = Field(
+            default=False,
+            description="Enable debug logging"
+        )
 
     def __init__(self) -> None:
         self.valves: Tools.Valves = self.Valves()
+        if self.valves.enable_debug:
+            logger.setLevel("DEBUG")
 
     def __getattr__(self, name: str) -> Any:
         """Handle dynamic attribute access"""
@@ -271,12 +279,16 @@ class Tools:
         :param __event_emitter__: event emitter callback
         :return: Markdown image link
         """
-        print("generating diagram using plantuml server:", self.valves.plantuml_server)
-        print("data:", data)
+        self.emitter = __event_emitter__
+        logger.info(f"generating diagram using plantuml server: {self.valves.plantuml_server}")
+        logger.info(f"plantuml code:\n{data}")
+
+        if not data:
+            self._fail("No PlantUML code provided")
 
         # Emit initial processing status
-        if __event_emitter__:
-            await __event_emitter__(
+        if self.emitter:
+            await self.emitter(
                 {
                     "type": "status",
                     "data": {
@@ -286,44 +298,25 @@ class Tools:
                 }
             )
 
-        if not data:
-            return "Error: No PlantUML code provided"
-
         try:
             if not data.strip().startswith("@startuml"):
                 data = "@startuml\n" + data
             if not data.strip().endswith("@enduml"):
                 data = data + "\n@enduml"
 
-            # if __event_emitter__:
-            #     await __event_emitter__(
-            #         {
-            #             "type": "message",
-            #             "data": {
-            #                 "content": f"```plantuml\n{data}\n```\n"
-            #             },
-            #         }
-            #     )
             # Use PlantUML library to get URL
             plantuml_image = Utils.generate_plantuml_image(
                 self.valves.plantuml_server, data
             )
 
             if plantuml_image.type == "error":
-                if __event_emitter__:
-                    await __event_emitter__(
-                        {
-                            "type": "status",
-                            "data": {
-                                "description": f"**ERROR:** {plantuml_image.data}",
-                                "done": True,
-                            },
-                        }
-                    )
-                return f"The PlantUML server failed with the following error: plantuml_image.data"
+                errmsg = f"**ERROR:** {plantuml_image.data}"
+                error_trace = traceback.format_exc()
+                logger.exception(f"Traceback: {error_trace}")
+                self._fail(errmsg)
 
-            if __event_emitter__:
-                await __event_emitter__(
+            if self.emitter:
+                await self.emitter(
                     {
                         "type": "message",
                         "data": {
@@ -331,8 +324,8 @@ class Tools:
                         },
                     }
                 )
-            if __event_emitter__:
-                await __event_emitter__(
+            if self.emitter:
+                await self.emitter(
                     {
                         "type": "status",
                         "data": {
@@ -341,20 +334,30 @@ class Tools:
                         },
                     }
                 )
-            return f"Your response must only contain the following code and only this code: ```plantuml\n{data}\n```\n"
+            return json.dumps(
+                {
+                    "plantuml_code": f"{data}",
+                    "status": "done",
+                },
+                ensure_ascii=False,
+            )
 
         except Exception as e:
             errmsg = f"Error generating PlantUML: {str(e)}"
-            if __event_emitter__:
-                await __event_emitter__(
-                    {
-                        "type": "status",
-                        "data": {
-                            "description": errmsg,
-                            "done": True,
-                        },
-                    }
-                )
             error_trace = traceback.format_exc()
-            print(f"{errmsg}\nTraceback: {error_trace}")
-            return errmsg
+            logger.exception(f"Traceback: {error_trace}")
+            self._fail(errmsg)
+
+    async def _fail(self, errmsg: str):
+        if self.emitter:
+            await self.emitter(
+                {
+                    "type": "status",
+                    "data": {
+                        "description": errmsg,
+                        "done": True,
+                    },
+                }
+            )
+        logger.error(errmsg)
+        return {"status": "error", "output": errmsg}
