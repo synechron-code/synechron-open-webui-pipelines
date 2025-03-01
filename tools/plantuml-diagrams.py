@@ -1,11 +1,10 @@
 """
 title: PlantUML diagram generator
-author: crooy
+author: david.sewell
 description: This tool creates pretty diagram image from PlantUML code
-author_url: https://github.com/crooy/openwebui-things
+author_url: https://github.com/synechron-code/nexis-pipelines/plantuml-diagrams.py
 version: 0.1
 required_open_webui_version: 0.5.0
-requirements: plantuml
 """
 
 import base64
