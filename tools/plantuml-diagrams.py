@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Awaitable, Callable, Optional, Tuple, Literal
 from pydantic import BaseModel, Field
 import requests
+import traceback
 
 
 class Utils:
@@ -229,12 +230,17 @@ class Utils:
                     )
                     # return Utils.get_image_js(Utils.encode_image(BytesIO(response.content)))
             else:
-                error = f"PlantUML server error: {response.status_code}  \n{response.content.decode('utf-8')}"
+                errmsg = f"PlantUML server error: {response.status_code}  \n{response.content.decode('utf-8')}"
+                error_trace = traceback.format_exc()
+                print(f"{errmsg}\nTraceback: {error_trace}")
+                error = Utils.EncodedImage(errmsg, None, "error")
                 return error
         except Exception as e:
-            error = f"PlantUML server error: {e}"
+            errmsg = f"PlantUML server error: {e}"
+            error_trace = traceback.format_exc()
+            print(f"{errmsg}\nTraceback: {error_trace}")
+            error = Utils.EncodedImage(errmsg, None, "error")
             return error
-
 
 class Tools:
     class Valves(BaseModel):
@@ -303,6 +309,19 @@ class Tools:
                 self.valves.plantuml_server, data
             )
 
+            if plantuml_image.type == "error":
+                if __event_emitter__:
+                    await __event_emitter__(
+                        {
+                            "type": "status",
+                            "data": {
+                                "description": f"**ERROR:** {plantuml_image.data}",
+                                "done": True,
+                            },
+                        }
+                    )
+                return f"The PlantUML server failed with the following error: plantuml_image.data"
+
             if __event_emitter__:
                 await __event_emitter__(
                     {
@@ -325,14 +344,17 @@ class Tools:
             return f"Your response must only contain the following code and only this code: ```plantuml\n{data}\n```\n"
 
         except Exception as e:
+            errmsg = f"Error generating PlantUML: {str(e)}"
             if __event_emitter__:
                 await __event_emitter__(
                     {
                         "type": "status",
                         "data": {
-                            "description": f"Error generating PlantUML URL: {str(e)}",
+                            "description": errmsg,
                             "done": True,
                         },
                     }
                 )
-            return f"There was an error in the PlantUML input code, please try again. Error: {str(e)}"
+            error_trace = traceback.format_exc()
+            print(f"{errmsg}\nTraceback: {error_trace}")
+            return errmsg
