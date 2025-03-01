@@ -29,72 +29,64 @@ def setup_logger():
         logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.set_name(name)
-        formatter = logging.Formatter(
-            "[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s"
-        )
+        formatter = logging.Formatter("[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.propagate = False
     return logger
+
 
 logger = setup_logger()
 
 
 class Pipeline:
     class Valves(BaseModel):
-        DISABLED: bool = Field(
-            default = True, description="Disable pipeline"
-        )
-        GITHUB_TOKEN: str = Field(
-            default = "", description="GitHub PAT with read access to repo to be accessed"
-        )
+        ENABLED: bool = Field(default=False, description="Enable pipeline")
+        GITHUB_TOKEN: str = Field(default="", description="GitHub PAT with read access to repo to be accessed")
         GITHUB_OWNER: str = Field(
-            default = "", description="GitHub owner for the repo e.g. http://github.com/<owner>/..."
+            default="", description="GitHub owner for the repo e.g. http://github.com/<owner>/..."
         )
-        GITHUB_REPO: str = Field(
-            default = "", description="GitHub repo e.g. http://github.com/<owner>/<repo>"
-        )
+        GITHUB_REPO: str = Field(default="", description="GitHub repo e.g. http://github.com/<owner>/<repo>")
         GITHUB_BRANCH: str = Field(
-            default = "main", description="GitHub branch to be analyzed e.g. http://github.com/<owner>/<repo>/tree/<branch>"
+            default="main",
+            description="GitHub branch to be analyzed e.g. http://github.com/<owner>/<repo>/tree/<branch>",
         )
-        OLLAMA_HOST: str = Field(
-            default = "http://ollama:11434", description="Ollama server host URL"
-        )
+        OLLAMA_HOST: str = Field(default="http://ollama:11434", description="Ollama server host URL")
         EMBED_MODEL: str = Field(
-            default = "text-embedding-3-large", description="Embedding model name (i.e. OpenAI name)"
+            default="text-embedding-3-large", description="Embedding model name (i.e. OpenAI name)"
         )
-        MODEL: str = Field(
-            default = "gpt-4o-mini", description="Model name (i.e. OpenAI name)"
-        )
+        MODEL: str = Field(default="gpt-4o-mini", description="Model name (i.e. OpenAI name)")
         AZURE_OPENAI_API_KEY: Optional[str] = Field(
-            default = None, description="Azure OpenAI key, if key is None, DefaultAzureCredential will retrieve key for Managed Identity"
+            default=None,
+            description="Azure OpenAI key, if key is None, DefaultAzureCredential will retrieve key for Managed Identity",
         )
         AZURE_OPENAI_ENDPOINT: Optional[str] = Field(
-            default = None, description="Azure OpenAI endpoint, blank Azure endpoint will enable Ollama endpoint and models"
+            default=None,
+            description="Azure OpenAI endpoint, blank Azure endpoint will enable Ollama endpoint and models",
         )
         AZURE_OPENAI_API_VERSION: Optional[str] = Field(
-            default = "2025-01-01-preview", description="Azure OpenAI versions"
+            default="2025-01-01-preview", description="Azure OpenAI versions"
         )
         AZURE_OPENAI_MODEL_NAME: Optional[str] = Field(
-            default = "gpt-4o-mini-payg", description="Deployment name (i.e. name given to model during deployment)"
+            default="gpt-4o-mini-payg", description="Deployment name (i.e. name given to model during deployment)"
         )
         AZURE_OPENAI_EMBED_MODEL_NAME: Optional[str] = Field(
-            default = "text-embedding-3-large", description="Embedding model deployment name (i.e. name given to model during deployment)"
+            default="text-embedding-3-large",
+            description="Embedding model deployment name (i.e. name given to model during deployment)",
         )
         INCLUDE_FILE_EXTENSIONS: Optional[str] = Field(
-            default= None, description="List of file extensions to include in the filter separated by ';'"
+            default=None, description="List of file extensions to include in the filter separated by ';'"
         )
         EXCLUDE_FILE_EXTENSIONS: Optional[str] = Field(
             default=".png;.jpg;.jpeg;.gif;.svg;.ico;.json;.ipynb",
             description="List of file extensions to exclude in the filter separated by ';'",
         )
         INCLUDE_DIRECTORIES: Optional[str] = Field(
-            default= None, description="List of directories to include in the filter separated by ';'"
+            default=None, description="List of directories to include in the filter separated by ';'"
         )
         EXCLUDE_DIRECTORIES: Optional[str] = Field(
-            default= None, description="List of directories to exclude in the filter separated by ';'"
+            default=None, description="List of directories to exclude in the filter separated by ';'"
         )
-
 
     def __init__(self):
         self.type = "manifold"
@@ -117,9 +109,7 @@ class Pipeline:
         owner = self.valves.GITHUB_OWNER
         repo = self.valves.GITHUB_REPO
         branch = self.valves.GITHUB_BRANCH
-        out = [
-            {"id": f"{name}:{owner}:{repo}:{branch}", "name": f"{name}:{owner}:{repo}:{branch}"}
-        ]
+        out = [{"id": f"{name}:{owner}:{repo}:{branch}", "name": f"{name}:{owner}:{repo}:{branch}"}]
         logger.info(f"llamaindex_ollama_github_pipeline - {name}: {owner}/{repo}/{branch}")
         return out
 
@@ -132,9 +122,7 @@ class Pipeline:
 
         if self.valves.AZURE_OPENAI_MODEL_NAME is not None:
             default_credential = DefaultAzureCredential(exclude_environment_credential=True)
-            token = default_credential.get_token(
-                "https://cognitiveservices.azure.com/.default"
-            )
+            token = default_credential.get_token("https://cognitiveservices.azure.com/.default")
 
             try:
                 self.llm = AzureOpenAI(
@@ -149,21 +137,16 @@ class Pipeline:
                 return f"Error: {e}"
         else:
             from llama_index.llms.ollama import Ollama
+
             try:
-                self.llm = Ollama(
-                    model=self.valves.MODEL,
-                    base_url=self.valves.OLLAMA_HOST,
-                    request_timeout=300.0
-                )
+                self.llm = Ollama(model=self.valves.MODEL, base_url=self.valves.OLLAMA_HOST, request_timeout=300.0)
                 logger.info(f"Created ollama llm: {self.valves.MODEL}")
             except Exception as e:
                 return f"Error: {e}"
 
         if self.valves.AZURE_OPENAI_EMBED_MODEL_NAME is not None:
             default_credential = DefaultAzureCredential(exclude_environment_credential=True)
-            token = default_credential.get_token(
-                "https://cognitiveservices.azure.com/.default"
-            )
+            token = default_credential.get_token("https://cognitiveservices.azure.com/.default")
 
             try:
                 self.embed_model = AzureOpenAIEmbedding(
@@ -178,11 +161,10 @@ class Pipeline:
                 return f"Error: {e}"
         else:
             from llama_index.embeddings.ollama import OllamaEmbedding
+
             try:
                 self.embed_model = OllamaEmbedding(
-                    model_name=self.valves.EMBED_MODEL,
-                    base_url=self.valves.OLLAMA_HOST,
-                    request_timeout=120.0
+                    model_name=self.valves.EMBED_MODEL, base_url=self.valves.OLLAMA_HOST, request_timeout=120.0
                 )
                 logger.info(f"Created ollama embedding: {self.valves.EMBED_MODEL}")
             except Exception as e:
@@ -194,7 +176,7 @@ class Pipeline:
         repo = self.valves.GITHUB_REPO
         branch = self.valves.GITHUB_BRANCH
 
-        if self.valves.DISABLED:
+        if not self.valves.ENABLED:
             logger.warning(f"Pipeline disabled")
             return
 
@@ -210,8 +192,12 @@ class Pipeline:
 
         github_client = GithubClient(github_token=github_token, verbose=True)
 
-        include_file_extensions = self.valves.INCLUDE_FILE_EXTENSIONS.split(";") if self.valves.INCLUDE_FILE_EXTENSIONS else []
-        exclude_file_extensions = self.valves.EXCLUDE_FILE_EXTENSIONS.split(";") if self.valves.EXCLUDE_FILE_EXTENSIONS else []
+        include_file_extensions = (
+            self.valves.INCLUDE_FILE_EXTENSIONS.split(";") if self.valves.INCLUDE_FILE_EXTENSIONS else []
+        )
+        exclude_file_extensions = (
+            self.valves.EXCLUDE_FILE_EXTENSIONS.split(";") if self.valves.EXCLUDE_FILE_EXTENSIONS else []
+        )
         include_directories = self.valves.INCLUDE_DIRECTORIES.split(";") if self.valves.INCLUDE_DIRECTORIES else []
         exclude_directories = self.valves.EXCLUDE_DIRECTORIES.split(";") if self.valves.EXCLUDE_DIRECTORIES else []
 
@@ -222,18 +208,26 @@ class Pipeline:
             use_parser=False,
             verbose=False,
             filter_file_extensions=(
-                include_file_extensions,
-                GithubRepositoryReader.FilterType.INCLUDE,
-            ) if include_file_extensions else (
-                exclude_file_extensions,
-                GithubRepositoryReader.FilterType.EXCLUDE,
+                (
+                    include_file_extensions,
+                    GithubRepositoryReader.FilterType.INCLUDE,
+                )
+                if include_file_extensions
+                else (
+                    exclude_file_extensions,
+                    GithubRepositoryReader.FilterType.EXCLUDE,
+                )
             ),
             filter_directories=(
-                include_directories,
-                GithubRepositoryReader.FilterType.INCLUDE,
-            ) if include_file_extensions else (
-                exclude_directories,
-                GithubRepositoryReader.FilterType.EXCLUDE,
+                (
+                    include_directories,
+                    GithubRepositoryReader.FilterType.INCLUDE,
+                )
+                if include_file_extensions
+                else (
+                    exclude_directories,
+                    GithubRepositoryReader.FilterType.EXCLUDE,
+                )
             ),
         )
 
@@ -263,7 +257,8 @@ class Pipeline:
 
     async def on_startup(self):
         logger.info(f"on_startup: {name}")
-        self.valves.DISABLED = True
+        self.pipelines = self.pipes()
+        self.valves.ENABLED = False
         pass
 
     async def on_shutdown(self):
@@ -289,10 +284,8 @@ class Pipeline:
             return None
         try:
             query_engine = self.index.as_query_engine(
-                streaming=True,
-                similarity_top_k=0,
-                vector_store_query_mode="default"
-                )
+                streaming=True, similarity_top_k=0, vector_store_query_mode="default"
+            )
             response = query_engine.query(user_message)
         except Exception as e:
             raise Exception(f"Exception in llamaindex_ollama_github_pipeline: {e}")
