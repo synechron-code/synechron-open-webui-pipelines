@@ -11,15 +11,19 @@ environment_variables: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI
 
 from http.client import HTTPConnection
 import logging
+import time
 from typing import List, Union, Generator, Iterator, Optional
 from pydantic import BaseModel, Field
 import os
 
-from openai import AzureOpenAI, ChatCompletion
+from openai import AzureOpenAI, APIError, APIConnectionError, RateLimitError, BadRequestError, AuthenticationError, \
+    InternalServerError, Stream, ChatCompletion
 from azure.identity import DefaultAzureCredential
 from azure.core.credentials import AzureKeyCredential
 
 name = "Azure OpenAI API"
+
+OPENAI_RETRY_MAX = 3
 
 def setup_logger():
     logger = logging.getLogger(name)
@@ -76,6 +80,33 @@ class Pipeline:
         self.client = self._openai_client()
 
         pass
+
+    # decode openai error and return the error message and retry flag
+    def handle_openai_error(self, e):
+        error = {
+            "msg": "API Error",
+            "detail": f"{', '.join(map(str, e.args))}",
+            "retry": False,
+        }
+        if isinstance(e, APIError):
+            error["msg"] = "API Error"
+            error["retry"] = True
+        elif isinstance(e, AuthenticationError):
+            error["msg"] = "Authentication Error"
+            self.client = self._openai_client()
+            error["retry"] = True
+        elif isinstance(e, APIConnectionError):
+            error["msg"] = "Connection Error"
+        elif isinstance(e, BadRequestError):
+            error["msg"] = "Invalid Request Error"
+        elif isinstance(e, RateLimitError):
+            error["msg"] = "Request Exceeded Rate Limit"
+            error["retry"] = True
+        elif isinstance(e, InternalServerError):
+            error["msg"] = "Service Unavailable Error"
+        else:
+            error["msg"] = "Unknown Error"
+        return error
 
     def _enable_debug(self, enable: bool = False):
         if enable:
@@ -193,22 +224,32 @@ class Pipeline:
 
 
         response: ChatCompletion = None
-        try:
-            logger.debug(f"{parameters=}")
-            response = self.client.chat.completions.create(**parameters)
-            logger.debug(f"{response=}")
+        retry_count = 0
+        while not response and retry_count < OPENAI_RETRY_MAX:
+            try:
+                retry_count += 1
+                logger.debug(f"{parameters=}")
+                response = self.client.chat.completions.create(**parameters)
+                logger.debug(f"{response=}")
 
-            if stream:
-                return self.stream_response(response)
-            else:
-                return response.choices[0].message.content
+                if stream:
+                    return self.stream_response(response)
+                else:
+                    return response.choices[0].message.content
 
-        except Exception as e:
-            if response:
-                text = response.choices[0].message.content
-                return f"Error: {e} ({text})"
-            else:
-                return f"Error: {e}"
+            except Exception as e:
+                error = self.handle_openai_error(e)
+                errmsg = f"OpenAI API error: {error}"
+                if response:
+                    errmsg += f": {response.choices[0].message.content}"
+                logger.error(errmsg)
+
+                if error["retry"] and retry_count < OPENAI_RETRY_MAX:
+                    time.sleep(delay)
+                    delay *= 2 # backoff retry delay next time
+                    response = None
+                else:
+                    return errmsg
 
     def stream_response(self, response: ChatCompletion):
         for chunk in response:
