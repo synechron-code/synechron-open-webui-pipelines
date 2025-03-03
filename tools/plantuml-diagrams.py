@@ -1,7 +1,7 @@
 """
 title: PlantUML diagram generator
 author: david.sewell
-description: This tool creates pretty diagram image from PlantUML code
+description: Create diagram image from PlantUML code using PlantUML stdlib includes with syntax like !include <C4/C4_Container>
 author_url: https://github.com/synechron-code/nexis-pipelines/plantuml-diagrams.py
 version: 0.1
 required_open_webui_version: 0.5.0
@@ -130,102 +130,12 @@ class Utils:
         return Utils.EncodedImage(html, image.size, "html")
 
     @staticmethod
-    def get_image_js(image: EncodedImage):
-
-        image = Utils.get_image_html(image)
-
-        image_html = textwrap.dedent(
-            r"""
-        <div style="border:1px solid lightgrery;">
-            <img src="%s" id="draggableImage"/>
-        </div>
-        """
-            % (image.data,)
-        )
-
-        style = textwrap.dedent(
-            r"""
-        <style>
-            #draggableImage {
-                width: %s;
-                touch-action: none;
-                padding: 2px
-            }
-        </style>
-        """
-            % "100%"
-        )
-
-        script = textwrap.dedent(
-            """
-        <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.11/dist/interact.min.js"></script>
-        <script>
-            interact('#draggableImage')
-                .draggable({
-                    onmove: dragMoveListener,
-                    onstart: function() { window.isDragging = true; },
-                    onend: function() { window.isDragging = false; },
-                    inertia: true,
-                    autoScroll: true
-                });
-
-            var scale = 1;
-            var x = 0;
-            var y = 0;
-
-            function dragMoveListener (event) {
-                var target = event.target;
-                x += event.dx;
-                y += event.dy;
-
-                target.style.webkitTransform =
-                target.style.transform =
-                    'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')';
-
-                target.setAttribute('data-x', x);
-                target.setAttribute('data-y', y);
-            }
-
-            document.getElementById('draggableImage').onwheel = function(e) {
-                e.preventDefault();
-
-                // Zoom in
-                if (e.deltaY < 0) {
-                    scale += 0.1;
-                }
-                // Zoom out
-                else {
-                    scale -= 0.1;
-                }
-
-                this.style.transform = 'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')';
-            }
-            document.getElementById('draggableImage').ondblclick = function(e) {
-                // Create an HTML string with the image
-                var html = '<html><body><img src="' + this.src + '"></body></html>';
-
-                // Create a new Blob object using the HTML string
-                var blob = new Blob([html], {type: 'text/html'});
-
-                // Create a URL representing the Blob object
-                var url = URL.createObjectURL(blob);
-
-                // Open the URL in a new tab
-                window.open(url, '_blank');
-            }
-        </script>
-        """
-        )
-        html = image_html + style + script
-        return Utils.EncodedImage(html, image.size, "html")
-
-    @staticmethod
     def generate_plantuml_image(plantuml_server, data: str):
         # Send the PlantUML code to the server and get the resulting image
         try:
             response = requests.post(plantuml_server, data=data)
             # Check if the request was successful
-            if response.status_code == 200:
+            if response.status_code in [200, 400]:
                 if plantuml_server.endswith("/svg"):
                     return Utils.get_image_html(Utils.encode_svg(response.content))
                     # return Utils.get_image_js(Utils.encode_svg(response.content))
@@ -272,12 +182,23 @@ class Tools:
         __event_emitter__: Optional[Callable[[dict], Awaitable[None]]] = None,
     ) -> str:
         """
-        Create a pretty diagram in PNG image format from PlantUML code
+        Generate a PlantUML diagram from PlantUML code.
+        PlantUML code must comply with the PlantUML coding standards.
+        PlantUML code must compile successfully on a PlantUML server.
+        PlantUML code must only use includes from the following list of stdlib includes:
 
-        :param data: block of valid PlantUML code
-        :param __user__: user dictionary
+        list of stdlib includes:
+        !include <C4/C4_Context>
+        !include <C4/C4_Container>
+        !include <C4/C4_Component>
+        !include <C4/C4_Container>
+        !include <C4/C4_Deployment>
+        !include <C4/C4_Dynamic>
+        !include <C4/C4_Sequence>
+
+        :param data: block of valid PlantUML code that will compile successfully on a PlantUML server.
         :param __event_emitter__: event emitter callback
-        :return: Markdown image link
+        :return: JSON object {"plantuml_code": code, "status": status}
         """
         self.emitter = __event_emitter__
         logger.info(f"generating diagram using plantuml server: {self.valves.plantuml_server}")
@@ -361,3 +282,385 @@ class Tools:
             )
         logger.error(errmsg)
         return {"status": "error", "output": errmsg}
+
+
+if __name__ == "__main__":
+    tool = Tools()
+
+# Examples for docstring if needed
+"""
+        Example 1:
+        @startuml
+        !include <C4/C4_Context>
+
+        LAYOUT_WITH_LEGEND()
+
+        title System Context diagram for Internet Banking System
+
+        Person(customer, "Personal Banking Customer", "A customer of the bank, with personal bank accounts.")
+        System(banking_system, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")
+
+        System_Ext(mail_system, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+        System_Ext(mainframe, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+        Rel(customer, banking_system, "Uses")
+        Rel_Back(customer, mail_system, "Sends e-mails to")
+        Rel_Neighbor(banking_system, mail_system, "Sends e-mails", "SMTP")
+        Rel(banking_system, mainframe, "Uses")
+        @enduml
+
+        Example 2:
+        @startuml
+        !include <C4/C4_Container>
+
+        ' LAYOUT_TOP_DOWN()
+        ' LAYOUT_AS_SKETCH()
+        LAYOUT_WITH_LEGEND()
+
+        title Container diagram for Internet Banking System
+
+        Person(customer, Customer, "A customer of the bank, with personal bank accounts")
+
+        System_Boundary(c1, "Internet Banking") {
+            Container(web_app, "Web Application", "Java, Spring MVC", "Delivers the static content and the Internet banking SPA")
+            Container(spa, "Single-Page App", "JavaScript, Angular", "Provides all the Internet banking functionality to customers via their web browser")
+            Container(mobile_app, "Mobile App", "C#, Xamarin", "Provides a limited subset of the Internet banking functionality to customers via their mobile device")
+            ContainerDb(database, "Database", "SQL Database", "Stores user registration information, hashed auth credentials, access logs, etc.")
+            Container(backend_api, "API Application", "Java, Docker Container", "Provides Internet banking functionality via API")
+        }
+
+        System_Ext(email_system, "E-Mail System", "The internal Microsoft Exchange system")
+        System_Ext(banking_system, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+        Rel(customer, web_app, "Uses", "HTTPS")
+        Rel(customer, spa, "Uses", "HTTPS")
+        Rel(customer, mobile_app, "Uses")
+
+        Rel_Neighbor(web_app, spa, "Delivers")
+        Rel(spa, backend_api, "Uses", "async, JSON/HTTPS")
+        Rel(mobile_app, backend_api, "Uses", "async, JSON/HTTPS")
+        Rel_Back_Neighbor(database, backend_api, "Reads from and writes to", "sync, JDBC")
+
+        Rel_Back(customer, email_system, "Sends e-mails to")
+        Rel_Back(email_system, backend_api, "Sends e-mails using", "sync, SMTP")
+        Rel_Neighbor(backend_api, banking_system, "Uses", "sync/async, XML/HTTPS")
+        @enduml
+
+        Example 3:
+        @startuml
+        !include <C4/C4_Component>
+
+        LAYOUT_WITH_LEGEND()
+
+        title Component diagram for Internet Banking System - API Application
+
+        Container(spa, "Single Page Application", "javascript and angular", "Provides all the internet banking functionality to customers via their web browser.")
+        Container(ma, "Mobile App", "Xamarin", "Provides a limited subset ot the internet banking functionality to customers via their mobile mobile device.")
+        ContainerDb(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+        System_Ext(mbs, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+        Container_Boundary(api, "API Application") {
+            Component(sign, "Sign In Controller", "MVC Rest Controller", "Allows users to sign in to the internet banking system")
+            Component(accounts, "Accounts Summary Controller", "MVC Rest Controller", "Provides customers with a summary of their bank accounts")
+            Component(security, "Security Component", "Spring Bean", "Provides functionality related to singing in, changing passwords, etc.")
+            Component(mbsfacade, "Mainframe Banking System Facade", "Spring Bean", "A facade onto the mainframe banking system.")
+
+            Rel(sign, security, "Uses")
+            Rel(accounts, mbsfacade, "Uses")
+            Rel(security, db, "Read & write to", "JDBC")
+            Rel(mbsfacade, mbs, "Uses", "XML/HTTPS")
+        }
+
+        Rel(spa, sign, "Uses", "JSON/HTTPS")
+        Rel(spa, accounts, "Uses", "JSON/HTTPS")
+
+        Rel(ma, sign, "Uses", "JSON/HTTPS")
+        Rel(ma, accounts, "Uses", "JSON/HTTPS")
+        @enduml
+
+        Example 4:
+        @startuml
+        !include <C4/C4_Context>
+
+        'LAYOUT_TOP_DOWN()
+        'LAYOUT_AS_SKETCH()
+        LAYOUT_WITH_LEGEND()
+
+        title System Landscape diagram for Big Bank plc
+
+        Person(customer, "Personal Banking Customer", "A customer of the bank, with personal bank accounts.")
+
+        Enterprise_Boundary(c0, "Big Bank plc") {
+            System(banking_system, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")
+
+            System_Ext(atm, "ATM", "Allows customers to withdraw cash.")
+            System_Ext(mail_system, "E-mail system", "The internal Microsoft Exchange e-mail system.")
+
+            System_Ext(mainframe, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+            Person_Ext(customer_service, "Customer Service Staff", "Customer service staff within the bank.")
+            Person_Ext(back_office, "Back Office Staff", "Administration and support staff within the bank.")
+        }
+
+        Rel_Neighbor(customer, banking_system, "Uses")
+        Rel_R(customer, atm, "Withdraws cash using")
+        Rel_Back(customer, mail_system, "Sends e-mails to")
+
+        Rel_R(customer, customer_service, "Asks questions to", "Telephone")
+
+        Rel_D(banking_system, mail_system, "Sends e-mail using")
+        Rel_R(atm, mainframe, "Uses")
+        Rel_R(banking_system, mainframe, "Uses")
+        Rel_D(customer_service, mainframe, "Uses")
+        Rel_U(back_office, mainframe, "Uses")
+
+        Lay_D(atm, banking_system)
+
+        Lay_D(atm, customer)
+        Lay_U(mail_system, customer)
+        @enduml
+
+        Example 5:
+        @startuml
+        !include <C4/C4_Dynamic>
+
+        LAYOUT_WITH_LEGEND()
+
+        ContainerDb(c4, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+        Container(c1, "Single-Page Application", "JavaScript and Angular", "Provides all of the Internet banking functionality to customers via their web browser.")
+        Container_Boundary(b, "API Application") {
+        Component(c3, "Security Component", "Spring Bean", "Provides functionality Related to signing in, changing passwords, etc.")
+        Component(c2, "Sign In Controller", "Spring MVC Rest Controller", "Allows users to sign in to the Internet Banking System.")
+        }
+        Rel_R(c1, c2, "Submits credentials to", "JSON/HTTPS")
+        Rel(c2, c3, "Calls isAuthenticated() on")
+        Rel_R(c3, c4, "select * from users where username = ?", "JDBC")
+        @enduml
+
+        Example 6:
+        @startuml
+        !include <C4/C4_Sequence>
+
+        Container(c1, "Single-Page Application", "JavaScript and Angular", "Provides all of the Internet banking functionality to customers via their web browser.")
+
+        Container_Boundary(b, "API Application")
+        Component(c2, "Sign In Controller", "Spring MVC Rest Controller", "Allows users to sign in to the Internet Banking System.")
+        Component(c3, "Security Component", "Spring Bean", "Provides functionality Related to signing in, changing passwords, etc.")
+        Boundary_End()
+
+        ContainerDb(c4, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+
+        Rel(c1, c2, "Submits credentials to", "JSON/HTTPS")
+        Rel(c2, c3, "Calls isAuthenticated() on")
+        Rel(c3, c4, "select * from users where username = ?", "JDBC")
+
+        SHOW_LEGEND()
+        @enduml
+
+        Example 7:
+        @startuml
+        !include <C4/C4_Deployment>
+
+        AddElementTag("fallback", $bgColor="#c0c0c0")
+        AddRelTag("fallback", $textColor="#c0c0c0", $lineColor="#438DD5")
+
+        ' calculated legend is used (activated in last line)
+        ' LAYOUT_WITH_LEGEND()
+
+        title Deployment Diagram for Internet Banking System - Live
+
+        Deployment_Node(plc, "Big Bank plc", "Big Bank plc data center"){
+            Deployment_Node(dn, "bigbank-api***\tx8", "Ubuntu 16.04 LTS"){
+                Deployment_Node(apache, "Apache Tomcat", "Apache Tomcat 8.x"){
+                    Container(api, "API Application", "Java and Spring MVC", "Provides Internet Banking functionality via a JSON/HTTPS API.")
+                }
+            }
+            Deployment_Node(bigbankdb01, "bigbank-db01", "Ubuntu 16.04 LTS"){
+                Deployment_Node(oracle, "Oracle - Primary", "Oracle 12c"){
+                    ContainerDb(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+                }
+            }
+            Deployment_Node(bigbankdb02, "bigbank-db02", "Ubuntu 16.04 LTS", $tags="fallback") {
+                Deployment_Node(oracle2, "Oracle - Secondary", "Oracle 12c", $tags="fallback") {
+                    ContainerDb(db2, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.", $tags="fallback")
+                }
+            }
+            Deployment_Node(bb2, "bigbank-web***\tx4", "Ubuntu 16.04 LTS"){
+                Deployment_Node(apache2, "Apache Tomcat", "Apache Tomcat 8.x"){
+                    Container(web, "Web Application", "Java and Spring MVC", "Delivers the static content and the Internet Banking single page application.")
+                }
+            }
+        }
+
+        Deployment_Node(mob, "Customer's mobile device", "Apple IOS or Android"){
+            Container(mobile, "Mobile App", "Xamarin", "Provides a limited subset of the Internet Banking functionality to customers via their mobile device.")
+        }
+
+        Deployment_Node(comp, "Customer's computer", "Microsoft Windows or Apple macOS"){
+            Deployment_Node(browser, "Web Browser", "Google Chrome, Mozilla Firefox, Apple Safari or Microsoft Edge"){
+                Container(spa, "Single Page Application", "JavaScript and Angular", "Provides all of the Internet Banking functionality to customers via their web browser.")
+            }
+        }
+
+        Rel(mobile, api, "Makes API calls to", "json/HTTPS")
+        Rel(spa, api, "Makes API calls to", "json/HTTPS")
+        Rel_U(web, spa, "Delivers to the customer's web browser")
+        Rel(api, db, "Reads from and writes to", "JDBC")
+        Rel(api, db2, "Reads from and writes to", "JDBC", $tags="fallback")
+        Rel_R(db, db2, "Replicates data to")
+
+        SHOW_LEGEND()
+        @enduml
+
+        Example 8:
+        @startuml
+        !include <C4/C4_Deployment>
+
+        AddElementTag("fallback", $bgColor="#c0c0c0")
+        AddRelTag("fallback", $textColor="#c0c0c0", $lineColor="#438DD5")
+
+        WithoutPropertyHeader()
+
+        ' calculated legend is used (activated in last line)
+        ' LAYOUT_WITH_LEGEND()
+
+        title Deployment Diagram for Internet Banking System - Live
+
+        Deployment_Node(plc, "Live", "Big Bank plc", "Big Bank plc data center"){
+            AddProperty("Location", "London and Reading")
+            Deployment_Node_L(dn, "bigbank-api***\tx8", "Ubuntu 16.04 LTS", "A web server residing in the web server farm, accessed via F5 BIG-IP LTMs."){
+                AddProperty("Java Version", "8")
+                AddProperty("Xmx", "512M")
+                AddProperty("Xms", "1024M")
+                Deployment_Node_L(apache, "Apache Tomcat", "Apache Tomcat 8.x", "An open source Java EE web server."){
+                    Container(api, "API Application", "Java and Spring MVC", "Provides Internet Banking functionality via a JSON/HTTPS API.")
+                }
+            }
+            AddProperty("Location", "London")
+            Deployment_Node_L(bigbankdb01, "bigbank-db01", "Ubuntu 16.04 LTS", "The primary database server."){
+                Deployment_Node_L(oracle, "Oracle - Primary", "Oracle 12c", "The primary, live database server."){
+                    ContainerDb(db, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.")
+                }
+            }
+            AddProperty("Location", "Reading")
+            Deployment_Node_R(bigbankdb02, "bigbank-db02", "Ubuntu 16.04 LTS", "The secondary database server.", $tags="fallback") {
+                Deployment_Node_R(oracle2, "Oracle - Secondary", "Oracle 12c", "A secondary, standby database server, used for failover purposes only.", $tags="fallback") {
+                    ContainerDb(db2, "Database", "Relational Database Schema", "Stores user registration information, hashed authentication credentials, access logs, etc.", $tags="fallback")
+                }
+            }
+            AddProperty("Location", "London and Reading")
+            Deployment_Node_R(bb2, "bigbank-web***\tx4", "Ubuntu 16.04 LTS", "A web server residing in the web server farm, accessed via F5 BIG-IP LTMs."){
+                AddProperty("Java Version", "8")
+                AddProperty("Xmx", "512M")
+                AddProperty("Xms", "1024M")
+                Deployment_Node_R(apache2, "Apache Tomcat", "Apache Tomcat 8.x", "An open source Java EE web server."){
+                    Container(web, "Web Application", "Java and Spring MVC", "Delivers the static content and the Internet Banking single page application.")
+                }
+            }
+        }
+
+        Deployment_Node(mob, "Customer's mobile device", "Apple IOS or Android"){
+            Container(mobile, "Mobile App", "Xamarin", "Provides a limited subset of the Internet Banking functionality to customers via their mobile device.")
+        }
+
+        Deployment_Node(comp, "Customer's computer", "Microsoft Windows of Apple macOS"){
+            Deployment_Node(browser, "Web Browser", "Google Chrome, Mozilla Firefox, Apple Safari or Microsoft Edge"){
+                Container(spa, "Single Page Application", "JavaScript and Angular", "Provides all of the Internet Banking functionality to customers via their web browser.")
+            }
+        }
+
+        Rel(mobile, api, "Makes API calls to", "json/HTTPS")
+        Rel(spa, api, "Makes API calls to", "json/HTTPS")
+        Rel_U(web, spa, "Delivers to the customer's web browser")
+        Rel(api, db, "Reads from and writes to", "JDBC")
+        Rel(api, db2, "Reads from and writes to", "JDBC", $tags="fallback")
+        Rel_R(db, db2, "Replicates data to")
+
+        SHOW_LEGEND()
+        @enduml
+
+        Example 9:
+        @startuml
+        !include <C4/C4_Container>
+
+        SHOW_PERSON_OUTLINE()
+        AddElementTag("backendContainer", $fontColor=$ELEMENT_FONT_COLOR, $bgColor="#335DA5", $shape=EightSidedShape(), $legendText="backend container\neight sided")
+        AddRelTag("async", $textColor=$ARROW_FONT_COLOR, $lineColor=$ARROW_COLOR, $lineStyle=DashedLine())
+        AddRelTag("sync/async", $textColor=$ARROW_FONT_COLOR, $lineColor=$ARROW_COLOR, $lineStyle=DottedLine())
+
+        title Container diagram for Internet Banking System
+
+        Person(customer, Customer, "A customer of the bank, with personal bank accounts")
+
+        System_Boundary(c1, "Internet Banking") {
+            Container(web_app, "Web Application", "Java, Spring MVC", "Delivers the static content and the Internet banking SPA")
+            Container(spa, "Single-Page App", "JavaScript, Angular", "Provides all the Internet banking functionality to customers via their web browser")
+            Container(mobile_app, "Mobile App", "C#, Xamarin", "Provides a limited subset of the Internet banking functionality to customers via their mobile device")
+            ContainerDb(database, "Database", "SQL Database", "Stores user registration information, hashed auth credentials, access logs, etc.")
+            Container(backend_api, "API Application", "Java, Docker Container", "Provides Internet banking functionality via API", $tags="backendContainer")
+        }
+
+        System_Ext(email_system, "E-Mail System", "The internal Microsoft Exchange system")
+        System_Ext(banking_system, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+        Rel(customer, web_app, "Uses", "HTTPS")
+        Rel(customer, spa, "Uses", "HTTPS")
+        Rel(customer, mobile_app, "Uses")
+
+        Rel_Neighbor(web_app, spa, "Delivers")
+        Rel(spa, backend_api, "Uses", "async, JSON/HTTPS", $tags="async")
+        Rel(mobile_app, backend_api, "Uses", "async, JSON/HTTPS", $tags="async")
+        Rel_Back_Neighbor(database, backend_api, "Reads from and writes to", "sync, JDBC")
+
+        Rel_Back(customer, email_system, "Sends e-mails to")
+        Rel_Back(email_system, backend_api, "Sends e-mails using", "sync, SMTP")
+        Rel_Neighbor(backend_api, banking_system, "Uses", "sync/async, XML/HTTPS", $tags="sync/async")
+
+        SHOW_LEGEND()
+        @enduml
+
+        Example 10:
+        @startuml
+        !include <C4/C4_Container>
+        !define DEVICONS https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons
+        !define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/font-awesome-5
+        !include DEVICONS/angular.puml
+        !include DEVICONS/dotnet.puml
+        !include DEVICONS/java.puml
+        !include DEVICONS/msql_server.puml
+        !include FONTAWESOME/server.puml
+        !include FONTAWESOME/envelope.puml
+
+        ' LAYOUT_TOP_DOWN()
+        ' LAYOUT_AS_SKETCH()
+        LAYOUT_WITH_LEGEND()
+
+        title Container diagram for Internet Banking System
+
+        Person(customer, Customer, "A customer of the bank, with personal bank accounts")
+
+        System_Boundary(c1, "Internet Banking") {
+            Container(web_app, "Web Application", "Java, Spring MVC", "Delivers the static content and the Internet banking SPA", "java")
+            Container(spa, "Single-Page App", "JavaScript, Angular", "Provides all the Internet banking functionality to customers via their web browser", "angular")
+            Container(mobile_app, "Mobile App", "C#, Xamarin", "Provides a limited subset of the Internet banking functionality to customers via their mobile device", "dotnet")
+            ContainerDb(database, "Database", "SQL Database", "Stores user registration information, hashed auth credentials, access logs, etc.", "mysql_server")
+            Container(backend_api, "API Application", "Java, Docker Container", "Provides Internet banking functionality via API", "server")
+        }
+
+        System_Ext(email_system, "E-Mail System", "The internal Microsoft Exchange system", "envelope")
+        System_Ext(banking_system, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")
+
+        Rel(customer, web_app, "Uses", "HTTPS")
+        Rel(customer, spa, "Uses", "HTTPS")
+        Rel(customer, mobile_app, "Uses")
+
+        Rel_Neighbor(web_app, spa, "Delivers")
+        Rel(spa, backend_api, "Uses", "async, JSON/HTTPS")
+        Rel(mobile_app, backend_api, "Uses", "async, JSON/HTTPS")
+        Rel_Back_Neighbor(database, backend_api, "Reads from and writes to", "sync, JDBC")
+
+        Rel_Back(customer, email_system, "Sends e-mails to")
+        Rel_Back(email_system, backend_api, "Sends e-mails using", "sync, SMTP")
+        Rel_Neighbor(backend_api, banking_system, "Uses", "sync/async, XML/HTTPS")
+        @enduml
+"""
