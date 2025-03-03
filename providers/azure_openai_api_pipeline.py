@@ -229,6 +229,7 @@ class Pipeline:
 
         response: ChatCompletion = None
         retry_count = 0
+        delay = 2
         while not response and retry_count < OPENAI_RETRY_MAX:
             try:
                 retry_count += 1
