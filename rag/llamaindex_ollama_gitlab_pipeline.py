@@ -326,7 +326,7 @@ class Pipeline:
         logger.debug(f"user_message: {user_message}")
         response = None
 
-        if not self.indexes.get(repo_id, None):
+        if not self.indexes or not self.indexes.get(repo_id, None):
             logger.error(f"Vector store index is not initialized for {repo_id}")
             return None
         try:
